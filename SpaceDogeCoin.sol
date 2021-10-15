@@ -1,9 +1,17 @@
 /**
- *Submitted for verification at BscScan.com on 2021-05-22
+ *Submitted for verification at BscScan.com on 2021-08-08
 */
 
 pragma solidity ^0.6.12;
-// SPDX-License-Identifier: Unlicensed
+
+/**
+ * website: https://bsccbn.github.io
+ * twitter: https://twitter.com/C_Neutrality
+ * telegram: https://t.me/C_Neutrality
+ **/
+
+//SPDX-License-Identifier: MIT
+
 interface IERC20 {
 
     function totalSupply() external view returns (uint256);
@@ -395,12 +403,20 @@ library Address {
  * the owner.
  */
 contract Ownable is Context {
-    address public _owner;
+    address private _owner;
     address private _previousOwner;
     uint256 private _lockTime;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
+    /**
+     * @dev Initializes the contract setting the deployer as the initial owner.
+     */
+    constructor () internal {
+        address msgSender = _msgSender();
+        _owner = msgSender;
+        emit OwnershipTransferred(address(0), msgSender);
+    }
 
     /**
      * @dev Returns the address of the current owner.
@@ -673,8 +689,11 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     ) external;
 }
 
+interface IWrap {
+    function withdraw() external;
+}
 
-contract CoinToken is Context, IERC20, Ownable {
+contract SpaceDogeCoin is Context, IERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
@@ -686,21 +705,22 @@ contract CoinToken is Context, IERC20, Ownable {
 
     mapping (address => bool) private _isExcluded;
     address[] private _excluded;
+    address  blackHole;
    
     uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal;
-    uint256 private _rTotal;
+    uint256 private _tTotal = 1000000000 * 10**6 * 10**9;
+    uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
-
-    string private _name;
-    string private _symbol;
-    uint256 private _decimals;
     
-    uint256 public _taxFee;
-    uint256 private _previousTaxFee;
+    string private _name = "SpaceDoge Coin";
+    string private _symbol = "SpaceDoge";
+    uint8 private _decimals = 2;
     
-    uint256 public _liquidityFee;
-    uint256 private _previousLiquidityFee;
+    uint256 public _taxFee = 5;
+    uint256 private _previousTaxFee = _taxFee;
+    
+    uint256 public _liquidityFee = 5;
+    uint256 private _previousLiquidityFee = _liquidityFee;
 
     IUniswapV2Router02 public immutable uniswapV2Router;
     address public immutable uniswapV2Pair;
@@ -708,8 +728,10 @@ contract CoinToken is Context, IERC20, Ownable {
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
     
-    uint256 public _maxTxAmount;
-    uint256 public numTokensSellToAddToLiquidity;
+    uint256 public _maxTxAmount = 2000000 * 10**6 * 10**9;
+    uint256 private numTokensSellToAddToLiquidity = 200000 * 10**6 * 10**9;
+    IERC20 public usdt = IERC20(0x55d398326f99059fF775485246999027B3197955);
+    IWrap public wrap;
     
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated(bool enabled);
@@ -725,38 +747,29 @@ contract CoinToken is Context, IERC20, Ownable {
         inSwapAndLiquify = false;
     }
     
-    constructor (string memory _NAME, string memory _SYMBOL, uint256 _DECIMALS, uint256 _supply, uint256 _txFee,uint256 _lpFee,uint256 _MAXAMOUNT,uint256 SELLMAXAMOUNT,address routerAddress,address tokenOwner) public {
-        _name = _NAME;
-        _symbol = _SYMBOL;
-        _decimals = _DECIMALS;
-        _tTotal = _supply * 10 ** _decimals;
-        _rTotal = (MAX - (MAX % _tTotal));
-        _taxFee = _txFee;
-        _liquidityFee = _lpFee;
-        _previousTaxFee = _txFee;
-        _previousLiquidityFee = _lpFee;
-        _maxTxAmount = _MAXAMOUNT * 10 ** _decimals;
-        numTokensSellToAddToLiquidity = SELLMAXAMOUNT * 10 ** _decimals;
+    constructor () public {
+        _rOwned[_msgSender()] = _rTotal;
         
-        
-        _rOwned[tokenOwner] = _rTotal;
-        
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(routerAddress);
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
          // Create a uniswap pair for this new token
         uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
-            .createPair(address(this), _uniswapV2Router.WETH());
+            .createPair(address(this), address(usdt));
 
         // set the rest of the contract variables
         uniswapV2Router = _uniswapV2Router;
         
         //exclude owner and this contract from fee
-        _isExcludedFromFee[tokenOwner] = true;
+        _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
-    
-        _owner = tokenOwner;
-        emit Transfer(address(0), tokenOwner, _tTotal);
+        
+        emit Transfer(address(0), _msgSender(), _tTotal);
     }
-
+    
+    function setWrap(IWrap _wrap) public {
+        require(_msgSender() == owner(), "fail");
+        wrap = _wrap;
+        _isExcludedFromFee[address(_wrap)] = true;
+    }
 
     function name() public view returns (string memory) {
         return _name;
@@ -766,7 +779,7 @@ contract CoinToken is Context, IERC20, Ownable {
         return _symbol;
     }
 
-    function decimals() public view returns (uint256) {
+    function decimals() public view returns (uint8) {
         return _decimals;
     }
 
@@ -865,7 +878,8 @@ contract CoinToken is Context, IERC20, Ownable {
             }
         }
     }
-        function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
+    
+    function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
         _tOwned[sender] = _tOwned[sender].sub(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
@@ -891,18 +905,22 @@ contract CoinToken is Context, IERC20, Ownable {
     function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
         _liquidityFee = liquidityFee;
     }
-    
-    function setNumTokensSellToAddToLiquidity(uint256 swapNumber) public onlyOwner {
-        numTokensSellToAddToLiquidity = swapNumber * 10 ** _decimals;
-    }
    
-    function setMaxTxPercent(uint256 maxTxPercent) public onlyOwner {
-        _maxTxAmount = maxTxPercent  * 10 ** _decimals;
+    function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
+        _maxTxAmount = _tTotal.mul(maxTxPercent).div(
+            10**2
+        );
     }
 
     function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
         swapAndLiquifyEnabled = _enabled;
         emit SwapAndLiquifyEnabledUpdated(_enabled);
+    }
+    
+    function setBlackHole(address _blackHole) public {
+        require(_msgSender() == owner(), "fail");
+        blackHole = _blackHole;
+        _isExcludedFromFee[blackHole] = true;
     }
     
      //to recieve ETH from uniswapV2Router when swaping
@@ -957,11 +975,6 @@ contract CoinToken is Context, IERC20, Ownable {
         _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
         if(_isExcluded[address(this)])
             _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
-    }
-    
-    
-    function claimTokens() public onlyOwner {
-            payable(_owner).transfer(address(this).balance);
     }
     
     function calculateTaxFee(uint256 _amount) private view returns (uint256) {
@@ -1058,18 +1071,38 @@ contract CoinToken is Context, IERC20, Ownable {
         // this is so that we can capture exactly the amount of ETH that the
         // swap creates, and not make the liquidity event include any ETH that
         // has been manually sent to the contract
-        uint256 initialBalance = address(this).balance;
+        // uint256 initialBalance = address(this).balance;
 
         // swap tokens for ETH
-        swapTokensForEth(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+        swapTokensForUsdt(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
 
         // how much ETH did we just swap into?
-        uint256 newBalance = address(this).balance.sub(initialBalance);
-
-        // add liquidity to uniswap
-        addLiquidity(otherHalf, newBalance);
+	    uint256 usdtBalance = usdt.balanceOf(address(this));
         
-        emit SwapAndLiquify(half, newBalance, otherHalf);
+        // add liquidity to uniswap
+        addLiquidityUsdt(otherHalf, usdtBalance);
+        
+        emit SwapAndLiquify(half, usdtBalance, otherHalf);
+    }
+    
+    function swapTokensForUsdt(uint256 tokenAmount) private {
+    	// generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = address(usdt);
+
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        // make the swap
+        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(wrap),
+            block.timestamp
+        );
+        
+        wrap.withdraw();
     }
 
     function swapTokensForEth(uint256 tokenAmount) private {
@@ -1090,10 +1123,27 @@ contract CoinToken is Context, IERC20, Ownable {
         );
     }
 
+    function addLiquidityUsdt(uint256 tokenAmount, uint256 usdtAmount) private {
+        // approve token transfer to cover all possible scenarios
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+        usdt.approve(address(uniswapV2Router), usdtAmount);
+
+        uniswapV2Router.addLiquidity(
+            address(this),
+            address(usdt),
+            tokenAmount,
+            usdtAmount,
+            0,
+            0,
+            blackHole,
+            block.timestamp
+        );
+    }
+    
     function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         // approve token transfer to cover all possible scenarios
         _approve(address(this), address(uniswapV2Router), tokenAmount);
-
+        
         // add the liquidity
         uniswapV2Router.addLiquidityETH{value: ethAmount}(
             address(this),
@@ -1154,8 +1204,5 @@ contract CoinToken is Context, IERC20, Ownable {
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
     }
-
-
-    
 
 }
