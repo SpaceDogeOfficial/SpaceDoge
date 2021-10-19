@@ -708,7 +708,7 @@ contract SpaceDogeCoin is Context, IERC20, Ownable {
     address  blackHole;
    
     uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal = 1000000000 * 10**6 * 10**9;
+    uint256 private _tTotal = 1000000000 * 10**6 * 10**2;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
     
@@ -728,8 +728,8 @@ contract SpaceDogeCoin is Context, IERC20, Ownable {
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
     
-    uint256 public _maxTxAmount = 2000000 * 10**6 * 10**9;
-    uint256 private numTokensSellToAddToLiquidity = 200000 * 10**6 * 10**9;
+    uint256 public _maxTxAmount = 2000000 * 10**6 * 10**2;
+    uint256 private numTokensSellToAddToLiquidity = 200000 * 10**6 * 10**2;
     IERC20 public usdt = IERC20(0x55d398326f99059fF775485246999027B3197955);
     IWrap public wrap;
     
